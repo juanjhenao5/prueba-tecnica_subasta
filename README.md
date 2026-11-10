@@ -65,27 +65,40 @@ Abre tu navegador en: [http://localhost:5000/](http://localhost:5000/)
 
 ---
 
-## 🧪 Pruebas Automatizadas
+## 🧪 Pruebas Automatizadas (Pujas, Cierre y Concurrencia)
 
-El proyecto incluye suites completas de pruebas automatizadas:
+El proyecto cuenta con una suite completa y modular de pruebas automatizadas con `pytest`:
 
-### 1. Suite Completa de Integración y Reglas de Negocio (HU-1 a HU-8)
-Valida todos los casos de éxito, validaciones y códigos de error:
+### 1. Ejecutar Toda la Suite (25 Pruebas Automatizadas)
+Ejecuta todas las pruebas de pujas, cierre y concurrencia en paralelo:
+```bash
+pytest -v
+```
+
+### 2. Pruebas por Módulo Específico
+* **Lógica de Pujas:** `pytest tests/test_pujas.py -v`
+  - Validaciones de monto mínimo (precio actual + incremento).
+  - Rechazo de auto-puja (pujar contra uno mismo siendo líder).
+  - Precisión exacta de 2 decimales sin errores de coma flotante.
+  - Rechazo de montos con 3 decimales, números negativos o formatos inválidos.
+  - Historial ordenado cronológicamente descendente.
+
+* **Lógica de Cierre:** `pytest tests/test_cierre.py -v`
+  - Cierre automático al expirar la fecha y registro de ganador/precio final.
+  - Subastas sin pujas declaradas como `DESIERTA`.
+  - Rechazo de cualquier puja en subastas finalizadas.
+  - Extensión anti-sniping de 60 segundos si entra puja en el último minuto.
+  - Límite estricto de máximo 10 extensiones anti-sniping.
+  - Atomicidad de la extensión (no se extiende ante ofertas inválidas).
+
+* **Lógica de Concurrencia (50 hilos simultáneos):** `pytest tests/test_concurrencia.py -v`
+  - 50 ofertas concurrentes en paralelo sobre el servidor HTTP.
+  - Verificación de consistencia: montos estrictamente crecientes y sin duplicados.
+  - 0 caídas o errores de servidor (500).
+
+### 3. Suite Integral (HU-1 a HU-11)
 ```bash
 python test_suite_completo.py
-```
-
-### 2. Prueba de Concurrencia — 50 Pujas Simultáneas (HU-6)
-Demuestra la consistencia estricta en concurrencia (sin duplicados, montos crecientes):
-```bash
-python ejecutar_servidor_y_test_concurrencia.py
-```
-*(O con el servidor `python app.py` ya corriendo, ejecuta `python test_concurrencia.py`)*
-
-### 3. Demostración Interactiva Paso a Paso
-Demuestra el ciclo de vida completo en consola con salida formateada:
-```bash
-python demo_funcionamiento.py
 ```
 
 ---

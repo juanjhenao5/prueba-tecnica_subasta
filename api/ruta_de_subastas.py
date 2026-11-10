@@ -35,7 +35,8 @@ def crear_subasta():
             201,
         )
     except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+        status_code = 404 if "no existe" in str(e).lower() else 400
+        return jsonify({"success": False, "error": str(e)}), status_code
     except Exception:
         return jsonify({"success": False, "error": "Error al crear la subasta."}), 500
 
@@ -99,6 +100,7 @@ def pujar(subasta_id):
             201,
         )
     except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+        status_code = 404 if "no existe" in str(e).lower() else 400
+        return jsonify({"success": False, "error": str(e)}), status_code
     except Exception:
         return jsonify({"success": False, "error": "Error al registrar la puja."}), 500
