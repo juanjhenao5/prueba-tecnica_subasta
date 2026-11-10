@@ -1,7 +1,7 @@
-from api.errores import registrar_manejadores_errores
-from api.ruta_de_subastas import subasta_bp
+from api import registrar_manejadores_errores, subasta_bp
 from extensions import db, migrate
 from flask import Flask, render_template
+from models import Puja, Subasta
 
 
 def create_app(config_name="config.DevelopmentConfig"):
@@ -14,10 +14,8 @@ def create_app(config_name="config.DevelopmentConfig"):
     app.register_blueprint(subasta_bp)
     registrar_manejadores_errores(app)
 
-    # Importar modelos para que SQLAlchemy los registre y crear tablas
+    # Crear tablas en el contexto de la aplicación
     with app.app_context():
-        from models.subasta import Subasta  # noqa: F401
-        from models.puja import Puja  # noqa: F401
         db.create_all()
 
     # HU-8: Ruta para servir la interfaz web

@@ -101,8 +101,12 @@ class SubastaService:
             incremento_minimo=incremento_decimal,
             fecha_fin=fecha_fin,
         )
-        db.session.add(nueva)
-        db.session.commit()
+        try:
+            db.session.add(nueva)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
         return nueva
 
     # ── HU-2: Listar subastas ───────────────────────────────────────
