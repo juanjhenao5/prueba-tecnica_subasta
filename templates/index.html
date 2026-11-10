@@ -212,7 +212,17 @@
     document.getElementById("alert-success").style.display = "none";
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────
+  // ── Helpers y Seguridad (Anti-XSS) ───────────────────────────────
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
 
   function formatearTiempo(segundos) {
     if (segundos <= 0) return "Finalizada";
@@ -279,14 +289,14 @@
         ? '<span class="badge badge-desert">Desierta</span>'
         : '<span class="badge badge-closed">Cerrada</span>');
 
-    const postor = s.mejor_postor ? s.mejor_postor : "Sin pujas";
+    const postor = s.mejor_postor ? escapeHtml(s.mejor_postor) : "Sin pujas";
     const ganadorInfo = !s.esta_abierta && s.ganador && s.ganador !== "DESIERTA"
-      ? `<span>🏆 Ganador: <strong>${s.ganador}</strong></span>` : "";
+      ? `<span>🏆 Ganador: <strong>${escapeHtml(s.ganador)}</strong></span>` : "";
 
     return `
       <div class="card subasta-item" onclick="verDetalle(${s.id})">
         <div class="card-header">
-          <h3>${s.titulo} ${badge}</h3>
+          <h3>${escapeHtml(s.titulo)} ${badge}</h3>
           <span class="precio-grande">$${s.precio_actual}</span>
         </div>
         <div class="subasta-meta">
@@ -429,7 +439,7 @@
     if (!s.esta_abierta && s.ganador && s.ganador !== "DESIERTA") {
       ganadorHtml = `
         <div class="card" style="background:#f0fdf4; border-color:#bbf7d0; margin-bottom:1rem;">
-          <h3>🏆 Subasta Finalizada — Ganador: ${s.ganador}</h3>
+          <h3>🏆 Subasta Finalizada — Ganador: ${escapeHtml(s.ganador)}</h3>
           <p style="margin-top:.35rem">Precio final de venta: <strong>$${s.precio_final}</strong></p>
         </div>`;
     } else if (s.ganador === "DESIERTA") {
@@ -479,7 +489,7 @@
               ${s.pujas.map((p, i) => `
                 <tr${i === 0 ? ' style="font-weight:600; color:var(--primary)"' : ''}>
                   <td>${s.total_pujas - i}</td>
-                  <td>${p.nombre_postor}${i === 0 ? ' 👑' : ''}</td>
+                  <td>${escapeHtml(p.nombre_postor)}${i === 0 ? ' 👑' : ''}</td>
                   <td>$${p.monto}</td>
                   <td>${formatearFecha(p.creada_en)}</td>
                 </tr>`).join("")}
@@ -493,9 +503,9 @@
     cont.innerHTML = `
       <div class="card">
         <div class="card-header">
-          <h3>${s.titulo} ${badge}</h3>
+          <h3>${escapeHtml(s.titulo)} ${badge}</h3>
         </div>
-        ${s.descripcion ? `<p style="color:var(--muted); margin-top:.5rem">${s.descripcion}</p>` : ""}
+        ${s.descripcion ? `<p style="color:var(--muted); margin-top:.5rem">${escapeHtml(s.descripcion)}</p>` : ""}
         ${extensionHtml}
         <div class="detalle-grid" style="margin-top:1rem">
           <div class="detalle-item">
@@ -504,7 +514,7 @@
           </div>
           <div class="detalle-item">
             <div class="label">Mejor Postor</div>
-            <div class="value" id="mejor-postor-val">${s.mejor_postor || "Sin pujas"}</div>
+            <div class="value" id="mejor-postor-val">${s.mejor_postor ? escapeHtml(s.mejor_postor) : "Sin pujas"}</div>
           </div>
           <div class="detalle-item">
             <div class="label">Tiempo Restante (Servidor)</div>
