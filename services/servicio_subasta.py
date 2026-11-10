@@ -179,7 +179,7 @@ class SubastaService:
     # ── HU-3: Registrar puja ────────────────────────────────────────
 
     @staticmethod
-    def registrar_puja(subasta_id, nombre_postor, monto):
+    def registrar_puja(subasta_id, nombre_postor, monto, idempotency_key=None):
         # Validar nombre
         if not nombre_postor or not str(nombre_postor).strip():
             raise ValueError("El nombre del postor es obligatorio.")
@@ -188,11 +188,24 @@ class SubastaService:
         # Validar monto (HU-4)
         monto_decimal = SubastaService._validar_decimales(monto, "El monto")
 
+        if idempotency_key:
+            idempotency_key = str(idempotency_key).strip()
+
         # HU-6: Sincronización atómica por subasta para concurrencia consistente
         lock = _obtener_lock_subasta(subasta_id)
         with lock:
             # Forzar recarga desde BD para ver commits de otros hilos
             db.session.expire_all()
+
+            # ── Idempotencia por clave (Idempotency-Key) ──
+            if idempotency_key:
+                puja_existente = Puja.query.filter_by(
+                    subasta_id=subasta_id, idempotency_key=idempotency_key
+                ).first()
+                if puja_existente:
+                    puja_existente.es_idempotente = True
+                    puja_existente.se_extendio = False
+                    return puja_existente
 
             subasta = db.session.get(Subasta, subasta_id)
             if not subasta:
@@ -208,8 +221,14 @@ class SubastaService:
                 .first()
             )
 
+            # ── Idempotencia natural: reintento exacto del postor por mala red ──
+            if ultima_puja and ultima_puja.nombre_postor == nombre_postor and ultima_puja.monto == monto_decimal:
+                ultima_puja.es_idempotente = True
+                ultima_puja.se_extendio = False
+                return ultima_puja
+
             if ultima_puja:
-                # HU-3: el postor no puede ser el mejor postor actual
+                # HU-3: el postor no puede ser el mejor postor actual (si el monto es diferente)
                 if ultima_puja.nombre_postor == nombre_postor:
                     raise ValueError("Ya eres el mejor postor actual. No puedes pujar contra ti mismo.")
                 precio_minimo = ultima_puja.monto + subasta.incremento_minimo
@@ -235,9 +254,11 @@ class SubastaService:
                 subasta_id=subasta_id,
                 nombre_postor=nombre_postor,
                 monto=monto_decimal,
+                idempotency_key=idempotency_key,
             )
             nueva_puja.se_extendio = se_extendio
             nueva_puja.extensiones_aplicadas = subasta.extensiones_aplicadas
+            nueva_puja.es_idempotente = False
 
             try:
                 db.session.add(nueva_puja)

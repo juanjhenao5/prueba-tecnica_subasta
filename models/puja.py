@@ -13,6 +13,8 @@ class Puja(db.Model):
     nombre_postor = db.Column(db.String(100), nullable=False)
     monto = db.Column(db.Numeric(12, 2), nullable=False)
     creada_en = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Clave de idempotencia para prevenir duplicados por mala red o reintentos
+    idempotency_key = db.Column(db.String(64), unique=True, nullable=True, index=True)
 
     def serializar(self):
         """Convierte el modelo a diccionario JSON-serializable."""
@@ -21,4 +23,5 @@ class Puja(db.Model):
             "nombre_postor": self.nombre_postor,
             "monto": str(self.monto),
             "creada_en": self.creada_en.isoformat() if self.creada_en else None,
+            "idempotency_key": self.idempotency_key,
         }

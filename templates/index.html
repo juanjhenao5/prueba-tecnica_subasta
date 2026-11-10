@@ -589,13 +589,20 @@
     btn.disabled = true;
     btn.textContent = "Enviando...";
 
+    // Idempotencia: clave única por intento para evitar duplicados por mala red
+    const idempotencyKey = "cli-" + (window.crypto && crypto.randomUUID ? crypto.randomUUID() : (Date.now() + "-" + Math.random()));
+
     try {
       const resp = await fetch(`${API}/${subastaId}/pujas`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
         body: JSON.stringify({
           nombre: document.getElementById("puja-nombre").value,
           monto: document.getElementById("puja-monto").value,
+          idempotency_key: idempotencyKey,
         }),
       });
 

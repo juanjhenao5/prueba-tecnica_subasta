@@ -72,6 +72,7 @@ def pujar(subasta_id):
     data = request.get_json() or {}
     nombre = data.get("nombre")
     monto = data.get("monto")
+    idempotency_key = request.headers.get("Idempotency-Key") or data.get("idempotency_key")
 
     if not nombre or monto is None:
         return (
@@ -80,16 +81,25 @@ def pujar(subasta_id):
         )
 
     try:
-        puja = SubastaService.registrar_puja(subasta_id, nombre, monto)
+        puja = SubastaService.registrar_puja(
+            subasta_id, nombre, monto, idempotency_key=idempotency_key
+        )
         datos_puja = puja.serializar()
         se_extendio = getattr(puja, "se_extendio", False)
         ext_count = getattr(puja, "extensiones_aplicadas", 0)
+        es_idempotente = getattr(puja, "es_idempotente", False)
         datos_puja["se_extendio"] = se_extendio
         datos_puja["extensiones_aplicadas"] = ext_count
+        datos_puja["idempotente"] = es_idempotente
 
-        mensaje = "Puja registrada exitosamente"
-        if se_extendio:
-            mensaje += f". Tiempo extendido por 60s (Extensión {ext_count}/10)"
+        if es_idempotente:
+            mensaje = "Puja ya registrada previamente (Idempotente)"
+            status_code = 200
+        else:
+            mensaje = "Puja registrada exitosamente"
+            if se_extendio:
+                mensaje += f". Tiempo extendido por 60s (Extensión {ext_count}/10)"
+            status_code = 201
 
         return (
             jsonify({
@@ -97,7 +107,7 @@ def pujar(subasta_id):
                 "mensaje": mensaje,
                 "data": datos_puja,
             }),
-            201,
+            status_code,
         )
     except ValueError as e:
         status_code = 404 if "no existe" in str(e).lower() else 400
