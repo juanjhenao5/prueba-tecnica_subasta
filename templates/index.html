@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subastas Online</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #1e293b;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 8px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── NAV ─────────────────────────────────── */
+    nav { background: var(--primary); color: #fff; padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+    nav h1 { font-size: 1.3rem; }
+    nav button { background: rgba(255,255,255,.2); color: #fff; border: 1px solid rgba(255,255,255,.3); padding: .5rem 1rem; border-radius: var(--radius); cursor: pointer; font-size: .9rem; transition: background .2s; }
+    nav button:hover { background: rgba(255,255,255,.35); }
+
+    /* ── CONTENEDOR ──────────────────────────── */
+    .container { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+
+    /* ── ALERTAS ──────────────────────────────── */
+    .alert { padding: .75rem 1rem; border-radius: var(--radius); margin-bottom: 1rem; font-size: .9rem; display: none; }
+    .alert-error { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
+    .alert-success { background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; }
+
+    /* ── CARDS ────────────────────────────────── */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .card h3 { margin-bottom: .5rem; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; }
+
+    /* ── SUBASTA ITEM ────────────────────────── */
+    .subasta-item { cursor: pointer; transition: border-color .2s, box-shadow .2s; }
+    .subasta-item:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(37,99,235,.12); }
+    .subasta-meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: .5rem; font-size: .85rem; color: var(--muted); }
+    .subasta-meta span { display: flex; align-items: center; gap: .25rem; }
+    .badge { display: inline-block; padding: .2rem .6rem; border-radius: 12px; font-size: .75rem; font-weight: 600; }
+    .badge-open { background: #dcfce7; color: #166534; }
+    .badge-closed { background: #fee2e2; color: #991b1b; }
+    .badge-desert { background: #fef3c7; color: #92400e; }
+    .precio-grande { font-size: 1.3rem; font-weight: 700; color: var(--primary); }
+
+    /* ── FORMULARIOS ─────────────────────────── */
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-weight: 600; margin-bottom: .3rem; font-size: .9rem; }
+    .form-group input, .form-group textarea { width: 100%; padding: .6rem .8rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: .9rem; }
+    .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    .form-group small { color: var(--muted); font-size: .8rem; }
+
+    .btn { padding: .6rem 1.2rem; border-radius: var(--radius); border: none; cursor: pointer; font-size: .9rem; font-weight: 600; transition: background .2s, opacity .2s; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:hover:not(:disabled) { background: #15803d; }
+    .btn-back { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-back:hover { background: var(--bg); }
+
+    /* ── TABLA ────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th, td { padding: .6rem .8rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: var(--bg); font-weight: 600; color: var(--muted); }
+
+    /* ── DETALLE ──────────────────────────────── */
+    .detalle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+    .detalle-item { }
+    .detalle-item .label { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .detalle-item .value { font-size: 1.1rem; font-weight: 600; margin-top: .15rem; }
+
+    /* ── SECCIONES ────────────────────────────── */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
+    .empty-state p { margin-top: .5rem; }
+
+    .section-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 2px solid var(--border); }
+
+    .loading { text-align: center; padding: 2rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <h1>🏷️ Subastas Online</h1>
+  <button onclick="mostrarCrear()">+ Nueva Subasta</button>
+</nav>
+
+<div class="container">
+  <!-- Alertas globales -->
+  <div id="alert-success" class="alert alert-success"></div>
+  <div id="alert-error" class="alert alert-error"></div>
+
+  <!-- ═══ SECCIÓN: LISTA ═══════════════════════════════════════════ -->
+  <div id="seccion-lista" class="section active">
+    <h2 class="section-title">Subastas</h2>
+    <div id="lista-subastas">
+      <div class="loading">Cargando subastas...</div>
+    </div>
+  </div>
+
+  <!-- ═══ SECCIÓN: CREAR ═══════════════════════════════════════════ -->
+  <div id="seccion-crear" class="section">
+    <button class="btn btn-back" onclick="mostrarLista()" style="margin-bottom:1rem">← Volver</button>
+    <div class="card">
+      <h3>Crear Nueva Subasta</h3>
+      <form id="form-crear" onsubmit="crearSubasta(event)" style="margin-top:1rem">
+        <div class="form-group">
+          <label>Título *</label>
+          <input type="text" id="crear-titulo" required maxlength="100" placeholder="Ej: iPhone 15 Pro">
+          <small>1 a 100 caracteres</small>
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea id="crear-descripcion" rows="3" placeholder="Descripción opcional del artículo"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Precio Inicial *</label>
+          <input type="number" id="crear-precio" required min="0.01" step="0.01" placeholder="100.00">
+          <small>Mayor a 0, máximo 2 decimales</small>
+        </div>
+        <div class="form-group">
+          <label>Incremento Mínimo *</label>
+          <input type="number" id="crear-incremento" required min="0.01" step="0.01" placeholder="10.00">
+          <small>Mayor a 0, máximo 2 decimales</small>
+        </div>
+        <div class="form-group">
+          <label>Fecha/Hora de Fin *</label>
+          <input type="datetime-local" id="crear-fecha-fin" required>
+          <small>Debe ser futura, máximo 7 días desde ahora</small>
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-crear">Crear Subasta</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══ SECCIÓN: DETALLE ═════════════════════════════════════════ -->
+  <div id="seccion-detalle" class="section">
+    <button class="btn btn-back" onclick="mostrarLista()" style="margin-bottom:1rem">← Volver a la lista</button>
+    <div id="detalle-contenido"></div>
+  </div>
+</div>
+
+<script>
+  const API = "/api/subastas";
+  let timerInterval = null;
+
+  // ── Navegación ────────────────────────────────────────────────────
+
+  function mostrarSeccion(id) {
+    document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+    ocultarAlertas();
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  }
+
+  function mostrarLista() { mostrarSeccion("seccion-lista"); cargarSubastas(); }
+  function mostrarCrear() {
+    mostrarSeccion("seccion-crear");
+    // Establecer fecha mínima (ahora) y máxima (+7 días)
+    const ahora = new Date();
+    const max = new Date(ahora.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const toLocal = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    document.getElementById("crear-fecha-fin").min = toLocal(ahora);
+    document.getElementById("crear-fecha-fin").max = toLocal(max);
+  }
+
+  // ── Alertas ───────────────────────────────────────────────────────
+
+  function mostrarError(msg) {
+    const el = document.getElementById("alert-error");
+    el.textContent = msg; el.style.display = "block";
+    document.getElementById("alert-success").style.display = "none";
+    setTimeout(() => el.style.display = "none", 6000);
+  }
+  function mostrarExito(msg) {
+    const el = document.getElementById("alert-success");
+    el.textContent = msg; el.style.display = "block";
+    document.getElementById("alert-error").style.display = "none";
+    setTimeout(() => el.style.display = "none", 4000);
+  }
+  function ocultarAlertas() {
+    document.getElementById("alert-error").style.display = "none";
+    document.getElementById("alert-success").style.display = "none";
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────
+
+  function formatearTiempo(segundos) {
+    if (segundos <= 0) return "Finalizada";
+    const d = Math.floor(segundos / 86400);
+    const h = Math.floor((segundos % 86400) / 3600);
+    const m = Math.floor((segundos % 3600) / 60);
+    const s = segundos % 60;
+    let partes = [];
+    if (d > 0) partes.push(d + "d");
+    if (h > 0) partes.push(h + "h");
+    if (m > 0) partes.push(m + "m");
+    partes.push(s + "s");
+    return partes.join(" ");
+  }
+
+  function formatearFecha(iso) {
+    if (!iso) return "-";
+    return new Date(iso).toLocaleString("es-CO");
+  }
+
+  // ── LISTAR SUBASTAS ───────────────────────────────────────────────
+
+  async function cargarSubastas() {
+    const cont = document.getElementById("lista-subastas");
+    cont.innerHTML = '<div class="loading">Cargando subastas...</div>';
+
+    try {
+      const resp = await fetch(API);
+      const json = await resp.json();
+
+      if (!json.success) { mostrarError(json.error); return; }
+
+      const subastas = json.data;
+      if (subastas.length === 0) {
+        cont.innerHTML = '<div class="empty-state"><h3>📭 No hay subastas</h3><p>Crea la primera subasta con el botón "+ Nueva Subasta"</p></div>';
+        return;
+      }
+
+      const abiertas = subastas.filter(s => s.esta_abierta);
+      const cerradas = subastas.filter(s => !s.esta_abierta);
+
+      let html = "";
+
+      if (abiertas.length > 0) {
+        html += '<h3 style="margin-bottom:.75rem; color: #166534;">🟢 Abiertas</h3>';
+        abiertas.forEach(s => html += renderSubastaCard(s));
+      }
+
+      if (cerradas.length > 0) {
+        html += '<h3 style="margin: 1.5rem 0 .75rem; color: #991b1b;">🔴 Cerradas</h3>';
+        cerradas.forEach(s => html += renderSubastaCard(s));
+      }
+
+      cont.innerHTML = html;
+    } catch (e) {
+      cont.innerHTML = '<div class="empty-state"><h3>Error al cargar</h3><p>No se pudo conectar con el servidor.</p></div>';
+    }
+  }
+
+  function renderSubastaCard(s) {
+    const badge = s.esta_abierta
+      ? '<span class="badge badge-open">Abierta</span>'
+      : (s.ganador === "DESIERTA"
+        ? '<span class="badge badge-desert">Desierta</span>'
+        : '<span class="badge badge-closed">Cerrada</span>');
+
+    const postor = s.mejor_postor ? s.mejor_postor : "Sin pujas";
+    const ganadorInfo = !s.esta_abierta && s.ganador && s.ganador !== "DESIERTA"
+      ? `<span>🏆 Ganador: <strong>${s.ganador}</strong></span>` : "";
+
+    return `
+      <div class="card subasta-item" onclick="verDetalle(${s.id})">
+        <div class="card-header">
+          <h3>${s.titulo} ${badge}</h3>
+          <span class="precio-grande">$${s.precio_actual}</span>
+        </div>
+        <div class="subasta-meta">
+          <span>👤 ${postor}</span>
+          <span>📊 ${s.total_pujas} pujas</span>
+          <span>📅 Fin: ${formatearFecha(s.fecha_fin)}</span>
+          ${ganadorInfo}
+        </div>
+      </div>`;
+  }
+
+  // ── DETALLE DE SUBASTA ────────────────────────────────────────────
+
+  async function verDetalle(id) {
+    mostrarSeccion("seccion-detalle");
+    const cont = document.getElementById("detalle-contenido");
+    cont.innerHTML = '<div class="loading">Cargando detalle...</div>';
+
+    try {
+      const resp = await fetch(`${API}/${id}`);
+      const json = await resp.json();
+
+      if (!json.success) { mostrarError(json.error); mostrarLista(); return; }
+
+      renderDetalle(json.data);
+    } catch (e) {
+      mostrarError("Error al cargar el detalle.");
+      mostrarLista();
+    }
+  }
+
+  function renderDetalle(s) {
+    const cont = document.getElementById("detalle-contenido");
+
+    const badge = s.esta_abierta
+      ? '<span class="badge badge-open">Abierta</span>'
+      : (s.ganador === "DESIERTA"
+        ? '<span class="badge badge-desert">Desierta</span>'
+        : '<span class="badge badge-closed">Cerrada</span>');
+
+    let ganadorHtml = "";
+    if (!s.esta_abierta && s.ganador && s.ganador !== "DESIERTA") {
+      ganadorHtml = `
+        <div class="card" style="background:#f0fdf4; border-color:#bbf7d0; margin-bottom:1rem;">
+          <h3>🏆 Ganador: ${s.ganador}</h3>
+          <p>Precio final: <strong>$${s.precio_final}</strong></p>
+        </div>`;
+    } else if (s.ganador === "DESIERTA") {
+      ganadorHtml = `
+        <div class="card" style="background:#fef3c7; border-color:#fde68a; margin-bottom:1rem;">
+          <h3>📭 Subasta Desierta</h3>
+          <p>No hubo pujas en esta subasta.</p>
+        </div>`;
+    }
+
+    let pujaFormHtml = "";
+    if (s.esta_abierta) {
+      pujaFormHtml = `
+        <div class="card" style="margin-bottom:1rem;">
+          <h3>💰 Realizar Puja</h3>
+          <form id="form-pujar" onsubmit="realizarPuja(event, ${s.id})" style="margin-top:.75rem">
+            <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:.75rem; align-items:end;">
+              <div class="form-group" style="margin-bottom:0">
+                <label>Tu nombre</label>
+                <input type="text" id="puja-nombre" required placeholder="Tu nombre">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label>Monto (mín. $${s.precio_actual !== s.precio_inicial ? (parseFloat(s.precio_actual) + parseFloat(s.incremento_minimo)).toFixed(2) : s.precio_inicial})</label>
+                <input type="number" id="puja-monto" required min="0.01" step="0.01" placeholder="${s.precio_actual !== s.precio_inicial ? (parseFloat(s.precio_actual) + parseFloat(s.incremento_minimo)).toFixed(2) : s.precio_inicial}">
+              </div>
+              <button type="submit" class="btn btn-success" id="btn-pujar" style="height:38px">Pujar</button>
+            </div>
+          </form>
+        </div>`;
+    }
+
+    let pujasHtml = "";
+    if (s.pujas && s.pujas.length > 0) {
+      pujasHtml = `
+        <div class="card">
+          <h3>📋 Historial de Pujas (${s.total_pujas})</h3>
+          <table style="margin-top:.75rem">
+            <thead><tr><th>#</th><th>Postor</th><th>Monto</th><th>Fecha</th></tr></thead>
+            <tbody>
+              ${s.pujas.map((p, i) => `
+                <tr${i === 0 ? ' style="font-weight:600; color:var(--primary)"' : ''}>
+                  <td>${s.total_pujas - i}</td>
+                  <td>${p.nombre_postor}${i === 0 ? ' 👑' : ''}</td>
+                  <td>$${p.monto}</td>
+                  <td>${formatearFecha(p.creada_en)}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>`;
+    } else {
+      pujasHtml = '<div class="card"><div class="empty-state"><p>Aún no hay pujas en esta subasta.</p></div></div>';
+    }
+
+    cont.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <h3>${s.titulo} ${badge}</h3>
+        </div>
+        ${s.descripcion ? `<p style="color:var(--muted); margin-top:.5rem">${s.descripcion}</p>` : ""}
+        <div class="detalle-grid" style="margin-top:1rem">
+          <div class="detalle-item">
+            <div class="label">Precio Actual</div>
+            <div class="value precio-grande">$${s.precio_actual}</div>
+          </div>
+          <div class="detalle-item">
+            <div class="label">Mejor Postor</div>
+            <div class="value">${s.mejor_postor || "Sin pujas"}</div>
+          </div>
+          <div class="detalle-item">
+            <div class="label">Tiempo Restante</div>
+            <div class="value" id="countdown">${formatearTiempo(s.tiempo_restante_segundos)}</div>
+          </div>
+          <div class="detalle-item">
+            <div class="label">Incremento Mínimo</div>
+            <div class="value">$${s.incremento_minimo}</div>
+          </div>
+        </div>
+      </div>
+      ${ganadorHtml}
+      ${pujaFormHtml}
+      ${pujasHtml}`;
+
+    // Timer de cuenta regresiva
+    if (s.esta_abierta && s.tiempo_restante_segundos > 0) {
+      let remaining = s.tiempo_restante_segundos;
+      timerInterval = setInterval(() => {
+        remaining--;
+        const el = document.getElementById("countdown");
+        if (el) el.textContent = formatearTiempo(remaining);
+        if (remaining <= 0) {
+          clearInterval(timerInterval);
+          verDetalle(s.id);  // Recargar para mostrar estado cerrado
+        }
+      }, 1000);
+    }
+  }
+
+  // ── CREAR SUBASTA ─────────────────────────────────────────────────
+
+  async function crearSubasta(event) {
+    event.preventDefault();
+    const btn = document.getElementById("btn-crear");
+    btn.disabled = true;
+    btn.textContent = "Creando...";
+
+    const fechaLocal = document.getElementById("crear-fecha-fin").value;
+    // Convertir datetime-local a ISO con timezone
+    const fechaISO = new Date(fechaLocal).toISOString();
+
+    try {
+      const resp = await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo: document.getElementById("crear-titulo").value,
+          descripcion: document.getElementById("crear-descripcion").value,
+          precio_inicial: document.getElementById("crear-precio").value,
+          incremento_minimo: document.getElementById("crear-incremento").value,
+          fecha_fin: fechaISO,
+        }),
+      });
+
+      const json = await resp.json();
+
+      if (json.success) {
+        mostrarExito("¡Subasta creada exitosamente!");
+        document.getElementById("form-crear").reset();
+        mostrarLista();
+      } else {
+        mostrarError(json.error);
+      }
+    } catch (e) {
+      mostrarError("Error de conexión con el servidor.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Crear Subasta";
+    }
+  }
+
+  // ── REALIZAR PUJA ─────────────────────────────────────────────────
+
+  async function realizarPuja(event, subastaId) {
+    event.preventDefault();
+    const btn = document.getElementById("btn-pujar");
+
+    // HU-8: protección contra doble clic
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = "Enviando...";
+
+    try {
+      const resp = await fetch(`${API}/${subastaId}/pujas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombre: document.getElementById("puja-nombre").value,
+          monto: document.getElementById("puja-monto").value,
+        }),
+      });
+
+      const json = await resp.json();
+
+      if (json.success) {
+        mostrarExito("¡Puja registrada exitosamente!");
+        verDetalle(subastaId);  // Recargar detalle
+      } else {
+        mostrarError(json.error);
+      }
+    } catch (e) {
+      mostrarError("Error de conexión con el servidor.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Pujar";
+    }
+  }
+
+  // ── INICIALIZAR ───────────────────────────────────────────────────
+
+  document.addEventListener("DOMContentLoaded", cargarSubastas);
+</script>
+</body>
+</html>

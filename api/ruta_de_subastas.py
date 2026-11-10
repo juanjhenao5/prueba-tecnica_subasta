@@ -1,0 +1,94 @@
+from flask import Blueprint, jsonify, request
+from services.servicio_subasta import SubastaService
+
+subasta_bp = Blueprint("subasta_bp", __name__, url_prefix="/api/subastas")
+
+
+# ── HU-1: Crear subasta ─────────────────────────────────────────────
+
+@subasta_bp.route("", methods=["POST"])
+def crear_subasta():
+    data = request.get_json() or {}
+
+    campos_requeridos = ["titulo", "precio_inicial", "incremento_minimo", "fecha_fin"]
+    faltantes = [c for c in campos_requeridos if c not in data or data[c] is None]
+    if faltantes:
+        return (
+            jsonify({"success": False, "error": f"Faltan campos: {', '.join(faltantes)}"}),
+            400,
+        )
+
+    try:
+        subasta = SubastaService.crear_subasta(
+            titulo=data["titulo"],
+            descripcion=data.get("descripcion", ""),
+            precio_inicial=data["precio_inicial"],
+            incremento_minimo=data["incremento_minimo"],
+            fecha_fin_str=data["fecha_fin"],
+        )
+        return (
+            jsonify({
+                "success": True,
+                "mensaje": "Subasta creada exitosamente",
+                "data": subasta.serializar(),
+            }),
+            201,
+        )
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception:
+        return jsonify({"success": False, "error": "Error al crear la subasta."}), 500
+
+
+# ── HU-2: Listar subastas ───────────────────────────────────────────
+
+@subasta_bp.route("", methods=["GET"])
+def listar_subastas():
+    try:
+        subastas = SubastaService.listar_subastas()
+        return jsonify({"success": True, "data": subastas}), 200
+    except Exception:
+        return jsonify({"success": False, "error": "Error al obtener las subastas."}), 500
+
+
+# ── HU-2: Detalle de subasta ────────────────────────────────────────
+
+@subasta_bp.route("/<int:subasta_id>", methods=["GET"])
+def detalle_subasta(subasta_id):
+    try:
+        detalle = SubastaService.obtener_detalle(subasta_id)
+        return jsonify({"success": True, "data": detalle}), 200
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 404
+    except Exception:
+        return jsonify({"success": False, "error": "Error al obtener el detalle."}), 500
+
+
+# ── HU-3: Realizar puja ─────────────────────────────────────────────
+
+@subasta_bp.route("/<int:subasta_id>/pujas", methods=["POST"])
+def pujar(subasta_id):
+    data = request.get_json() or {}
+    nombre = data.get("nombre")
+    monto = data.get("monto")
+
+    if not nombre or monto is None:
+        return (
+            jsonify({"success": False, "error": "Faltan campos: nombre, monto"}),
+            400,
+        )
+
+    try:
+        puja = SubastaService.registrar_puja(subasta_id, nombre, monto)
+        return (
+            jsonify({
+                "success": True,
+                "mensaje": "Puja registrada exitosamente",
+                "data": puja.serializar(),
+            }),
+            201,
+        )
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception:
+        return jsonify({"success": False, "error": "Error al registrar la puja."}), 500

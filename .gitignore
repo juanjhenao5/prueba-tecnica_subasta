@@ -1,0 +1,28 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Bytecode de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Bases de datos y archivos de instancia
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs y temporales
+*.log
+.coverage
+htmlcov/
+.pytest_cache/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
