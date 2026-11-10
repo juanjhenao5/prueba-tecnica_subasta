@@ -155,6 +155,10 @@
 <script>
   const API = "/api/subastas";
   let timerInterval = null;
+  let realtimePollingInterval = null;
+  let subastaActualId = null;
+  let tiempoRestanteServidor = 0;
+  let ultimoEstadoSubasta = null;
 
   // ── Navegación ────────────────────────────────────────────────────
 
@@ -162,12 +166,25 @@
     document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
     document.getElementById(id).classList.add("active");
     ocultarAlertas();
+
     if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    if (realtimePollingInterval) { clearInterval(realtimePollingInterval); realtimePollingInterval = null; }
+
+    if (id === "seccion-lista") {
+      subastaActualId = null;
+      // HU-9: sondeo periódico en la lista para ver cambios en vivo
+      realtimePollingInterval = setInterval(cargarSubastasSilencioso, 3000);
+    }
   }
 
-  function mostrarLista() { mostrarSeccion("seccion-lista"); cargarSubastas(); }
+  function mostrarLista() {
+    mostrarSeccion("seccion-lista");
+    cargarSubastas();
+  }
+
   function mostrarCrear() {
     mostrarSeccion("seccion-crear");
+    subastaActualId = null;
     // Establecer fecha mínima (ahora) y máxima (+7 días)
     const ahora = new Date();
     const max = new Date(ahora.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -281,10 +298,11 @@
       </div>`;
   }
 
-  // ── DETALLE DE SUBASTA ────────────────────────────────────────────
+  // ── DETALLE DE SUBASTA Y TIEMPO REAL (HU-9 & HU-10 & HU-11) ──────
 
   async function verDetalle(id) {
     mostrarSeccion("seccion-detalle");
+    subastaActualId = id;
     const cont = document.getElementById("detalle-contenido");
     cont.innerHTML = '<div class="loading">Cargando detalle...</div>';
 
@@ -295,41 +313,142 @@
       if (!json.success) { mostrarError(json.error); mostrarLista(); return; }
 
       renderDetalle(json.data);
+
+      // HU-9: Iniciar sondeo en tiempo real continuo cada 1.5s
+      if (realtimePollingInterval) clearInterval(realtimePollingInterval);
+      realtimePollingInterval = setInterval(() => actualizarDetalleEnVivo(id), 1500);
     } catch (e) {
       mostrarError("Error al cargar el detalle.");
       mostrarLista();
     }
   }
 
+  // HU-10: Cuenta regresiva sincronizada con el reloj del servidor
+  function iniciarTemporizadorServidor(segundosIniciales, subastaId) {
+    if (timerInterval) clearInterval(timerInterval);
+    tiempoRestanteServidor = Math.max(0, segundosIniciales);
+    const el = document.getElementById("countdown");
+    if (el) el.textContent = formatearTiempo(tiempoRestanteServidor);
+
+    timerInterval = setInterval(() => {
+      if (tiempoRestanteServidor > 0) {
+        tiempoRestanteServidor--;
+        const elC = document.getElementById("countdown");
+        if (elC) elC.textContent = formatearTiempo(tiempoRestanteServidor);
+        if (tiempoRestanteServidor <= 0) {
+          clearInterval(timerInterval);
+          // Forzar sincronización con el servidor para obtener el estado oficial cerrado
+          actualizarDetalleEnVivo(subastaId);
+        }
+      }
+    }, 1000);
+  }
+
+  // HU-9: Actualización reactiva sin recargar la página
+  async function actualizarDetalleEnVivo(id) {
+    if (subastaActualId !== id) return;
+    try {
+      const resp = await fetch(`${API}/${id}`);
+      const json = await resp.json();
+      if (!json.success) return;
+
+      const s = json.data;
+
+      // HU-10: Resincronizar tiempo restante con el servidor
+      tiempoRestanteServidor = s.tiempo_restante_segundos;
+      const elC = document.getElementById("countdown");
+      if (elC && s.esta_abierta) {
+        elC.textContent = formatearTiempo(tiempoRestanteServidor);
+      }
+
+      const firmaEstado = `${s.precio_actual}|${s.mejor_postor}|${s.total_pujas}|${s.esta_abierta}|${s.extensiones_aplicadas}`;
+      if (firmaEstado !== ultimoEstadoSubasta) {
+        // Hubo cambio (nueva puja, cierre o extensión anti-sniping)
+        const formNombre = document.getElementById("puja-nombre") ? document.getElementById("puja-nombre").value : "";
+        const formMonto = document.getElementById("puja-monto") ? document.getElementById("puja-monto").value : "";
+
+        renderDetalle(s);
+
+        // Preservar valores que el usuario estaba escribiendo en el formulario
+        if (document.getElementById("puja-nombre") && formNombre) document.getElementById("puja-nombre").value = formNombre;
+        if (document.getElementById("puja-monto") && formMonto) document.getElementById("puja-monto").value = formMonto;
+      }
+    } catch (e) {
+      // Ignorar fallos transitorios en polling de fondo
+    }
+  }
+
+  async function cargarSubastasSilencioso() {
+    if (subastaActualId !== null) return;
+    try {
+      const resp = await fetch(API);
+      const json = await resp.json();
+      if (!json.success) return;
+
+      const cont = document.getElementById("lista-subastas");
+      if (!cont || cont.querySelector(".loading")) return;
+
+      const subastas = json.data;
+      if (subastas.length === 0) return;
+
+      const abiertas = subastas.filter(s => s.esta_abierta);
+      const cerradas = subastas.filter(s => !s.esta_abierta);
+
+      let html = "";
+      if (abiertas.length > 0) {
+        html += '<h3 style="margin-bottom:.75rem; color: #166534;">🟢 Abiertas</h3>';
+        abiertas.forEach(s => html += renderSubastaCard(s));
+      }
+      if (cerradas.length > 0) {
+        html += '<h3 style="margin: 1.5rem 0 .75rem; color: #991b1b;">🔴 Cerradas</h3>';
+        cerradas.forEach(s => html += renderSubastaCard(s));
+      }
+      cont.innerHTML = html;
+    } catch (e) {}
+  }
+
   function renderDetalle(s) {
+    ultimoEstadoSubasta = `${s.precio_actual}|${s.mejor_postor}|${s.total_pujas}|${s.esta_abierta}|${s.extensiones_aplicadas}`;
     const cont = document.getElementById("detalle-contenido");
 
     const badge = s.esta_abierta
-      ? '<span class="badge badge-open">Abierta</span>'
+      ? '<span class="badge badge-open">🟢 Abierta — En Vivo</span>'
       : (s.ganador === "DESIERTA"
         ? '<span class="badge badge-desert">Desierta</span>'
         : '<span class="badge badge-closed">Cerrada</span>');
+
+    let extensionHtml = "";
+    if (s.extensiones_aplicadas > 0) {
+      extensionHtml = `
+        <div style="margin-top:.75rem; display:inline-flex; align-items:center; gap:.5rem; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:.35rem .75rem; border-radius:6px; font-size:.85rem;">
+          ⚡ <strong>Extensión anti-sniping:</strong> ${s.extensiones_aplicadas}/10 aplicada(s) (+60s por puja en último minuto)
+        </div>`;
+    }
 
     let ganadorHtml = "";
     if (!s.esta_abierta && s.ganador && s.ganador !== "DESIERTA") {
       ganadorHtml = `
         <div class="card" style="background:#f0fdf4; border-color:#bbf7d0; margin-bottom:1rem;">
-          <h3>🏆 Ganador: ${s.ganador}</h3>
-          <p>Precio final: <strong>$${s.precio_final}</strong></p>
+          <h3>🏆 Subasta Finalizada — Ganador: ${s.ganador}</h3>
+          <p style="margin-top:.35rem">Precio final de venta: <strong>$${s.precio_final}</strong></p>
         </div>`;
     } else if (s.ganador === "DESIERTA") {
       ganadorHtml = `
         <div class="card" style="background:#fef3c7; border-color:#fde68a; margin-bottom:1rem;">
-          <h3>📭 Subasta Desierta</h3>
-          <p>No hubo pujas en esta subasta.</p>
+          <h3>📭 Subasta Finalizada — Desierta</h3>
+          <p style="margin-top:.35rem">No hubo pujas recibidas durante el período de la subasta.</p>
         </div>`;
     }
 
     let pujaFormHtml = "";
     if (s.esta_abierta) {
+      const minPuja = s.total_pujas > 0
+        ? (parseFloat(s.precio_actual) + parseFloat(s.incremento_minimo)).toFixed(2)
+        : parseFloat(s.precio_inicial).toFixed(2);
+
       pujaFormHtml = `
         <div class="card" style="margin-bottom:1rem;">
-          <h3>💰 Realizar Puja</h3>
+          <h3>💰 Realizar Puja (Tiempo Real)</h3>
           <form id="form-pujar" onsubmit="realizarPuja(event, ${s.id})" style="margin-top:.75rem">
             <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:.75rem; align-items:end;">
               <div class="form-group" style="margin-bottom:0">
@@ -337,11 +456,14 @@
                 <input type="text" id="puja-nombre" required placeholder="Tu nombre">
               </div>
               <div class="form-group" style="margin-bottom:0">
-                <label>Monto (mín. $${s.precio_actual !== s.precio_inicial ? (parseFloat(s.precio_actual) + parseFloat(s.incremento_minimo)).toFixed(2) : s.precio_inicial})</label>
-                <input type="number" id="puja-monto" required min="0.01" step="0.01" placeholder="${s.precio_actual !== s.precio_inicial ? (parseFloat(s.precio_actual) + parseFloat(s.incremento_minimo)).toFixed(2) : s.precio_inicial}">
+                <label id="label-monto">Monto (mínimo $${minPuja})</label>
+                <input type="number" id="puja-monto" required min="${minPuja}" step="0.01" placeholder="${minPuja}">
               </div>
               <button type="submit" class="btn btn-success" id="btn-pujar" style="height:38px">Pujar</button>
             </div>
+            <small style="color:var(--muted); margin-top:.4rem; display:block">
+              ⏱️ Si pujas en los últimos 60s, el tiempo se extenderá 60 segundos automáticamente (hasta 10 veces).
+            </small>
           </form>
         </div>`;
     }
@@ -374,17 +496,18 @@
           <h3>${s.titulo} ${badge}</h3>
         </div>
         ${s.descripcion ? `<p style="color:var(--muted); margin-top:.5rem">${s.descripcion}</p>` : ""}
+        ${extensionHtml}
         <div class="detalle-grid" style="margin-top:1rem">
           <div class="detalle-item">
             <div class="label">Precio Actual</div>
-            <div class="value precio-grande">$${s.precio_actual}</div>
+            <div class="value precio-grande" id="precio-actual-val">$${s.precio_actual}</div>
           </div>
           <div class="detalle-item">
             <div class="label">Mejor Postor</div>
-            <div class="value">${s.mejor_postor || "Sin pujas"}</div>
+            <div class="value" id="mejor-postor-val">${s.mejor_postor || "Sin pujas"}</div>
           </div>
           <div class="detalle-item">
-            <div class="label">Tiempo Restante</div>
+            <div class="label">Tiempo Restante (Servidor)</div>
             <div class="value" id="countdown">${formatearTiempo(s.tiempo_restante_segundos)}</div>
           </div>
           <div class="detalle-item">
@@ -397,18 +520,9 @@
       ${pujaFormHtml}
       ${pujasHtml}`;
 
-    // Timer de cuenta regresiva
+    // HU-10: Iniciar temporizador del servidor
     if (s.esta_abierta && s.tiempo_restante_segundos > 0) {
-      let remaining = s.tiempo_restante_segundos;
-      timerInterval = setInterval(() => {
-        remaining--;
-        const el = document.getElementById("countdown");
-        if (el) el.textContent = formatearTiempo(remaining);
-        if (remaining <= 0) {
-          clearInterval(timerInterval);
-          verDetalle(s.id);  // Recargar para mostrar estado cerrado
-        }
-      }, 1000);
+      iniciarTemporizadorServidor(s.tiempo_restante_segundos, s.id);
     }
   }
 
@@ -478,8 +592,9 @@
       const json = await resp.json();
 
       if (json.success) {
-        mostrarExito("¡Puja registrada exitosamente!");
-        verDetalle(subastaId);  // Recargar detalle
+        mostrarExito(json.mensaje || "¡Puja registrada exitosamente!");
+        if (document.getElementById("puja-monto")) document.getElementById("puja-monto").value = "";
+        await actualizarDetalleEnVivo(subastaId);
       } else {
         mostrarError(json.error);
       }

@@ -2,7 +2,7 @@
 
 Solución completa y robusta para la gestión de subastas en tiempo real desarrollada en Python con Flask y SQLAlchemy.
 
-El sistema implementa y valida de forma estricta los 8 Criterios de Aceptación (**HU-1** a **HU-8**).
+El sistema implementa y valida de forma estricta los 11 Criterios de Aceptación (**HU-1** a **HU-11**).
 
 ---
 
@@ -16,6 +16,9 @@ El sistema implementa y valida de forma estricta los 8 Criterios de Aceptación 
 * **HU-6: Concurrencia**: Soporte para alta concurrencia mediante bloqueo y sincronización atómica por subasta (`threading.Lock` / `expire_all`). Se garantiza que ante 50 pujas simultáneas los montos sean estrictamente crecientes y sin duplicados.
 * **HU-7: Persistencia**: Persistencia completa en base de datos SQLite gestionada con SQLAlchemy y migraciones.
 * **HU-8: Interfaz Web (SPA)**: Frontend reactivo en HTML5, CSS3 y JavaScript moderno con cuenta regresiva en vivo, formulario de subastas, catálogo de subastas y protección contra doble clic en el botón de pujar.
+* **HU-9: Tiempo Real**: Actualización en vivo de nuevas pujas y cierre de la subasta para todos los espectadores **sin recargar la página**.
+* **HU-10: Cuenta Regresiva basada en el Servidor**: El temporizador está sincronizado y gobernado estrictamente por el reloj del servidor en UTC, garantizando exactitud absoluta incluso si el reloj del computador del usuario está adelantado o atrasado en 5 minutos.
+* **HU-11: Extensión Anti-sniping Atómica**: Si entra una puja válida en los últimos 60 segundos, el vencimiento de la subasta se extiende automáticamente para que resten 60 segundos desde esa puja, hasta un máximo de 10 extensiones. La puja y la extensión son una única operación estrictamente atómica.
 
 ---
 

@@ -15,9 +15,7 @@ from services.servicio_subasta import SubastaService
 class TestSubastasHU(unittest.TestCase):
     def setUp(self):
         # Crear app en modo test
-        self.app = create_app()
-        self.app.config['TESTING'] = True
-        self.app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+        self.app = create_app("config.TestingConfig")
         self.client = self.app.test_client()
         with self.app.app_context():
             db.create_all()
@@ -262,6 +260,127 @@ class TestSubastasHU(unittest.TestCase):
         self.assertIn("Subastas Online", html)
         self.assertIn("Nueva Subasta", html)
         self.assertIn("btn-pujar", html)
+
+    # ── HU-9: Tiempo real y sondeo continuo ──────────────────────────
+    def test_hu9_tiempo_real_sondeo(self):
+        # Crear subasta
+        fecha_fin = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+        res = self.client.post('/api/subastas', json={
+            "titulo": "Monitor 4K",
+            "precio_inicial": "300.00",
+            "incremento_minimo": "20.00",
+            "fecha_fin": fecha_fin
+        })
+        sid = res.get_json()['data']['id']
+
+        # El cliente consulta el detalle (primer espectador)
+        det1 = self.client.get(f'/api/subastas/{sid}').get_json()['data']
+        self.assertEqual(det1['total_pujas'], 0)
+        self.assertEqual(det1['precio_actual'], "300.00")
+
+        # Entra una puja desde otro cliente
+        self.client.post(f'/api/subastas/{sid}/pujas', json={"nombre": "Postor1", "monto": "300.00"})
+
+        # El primer espectador consulta de nuevo sin recargar la página (polling reactivo)
+        det2 = self.client.get(f'/api/subastas/{sid}').get_json()['data']
+        self.assertEqual(det2['total_pujas'], 1)
+        self.assertEqual(det2['precio_actual'], "300.00")
+        self.assertEqual(det2['mejor_postor'], "Postor1")
+
+    # ── HU-10: Cuenta regresiva basada en reloj del servidor ─────────
+    def test_hu10_cuenta_regresiva_servidor(self):
+        # Crear subasta a 120 segundos
+        fecha_fin = (datetime.now(timezone.utc) + timedelta(seconds=120)).isoformat()
+        res = self.client.post('/api/subastas', json={
+            "titulo": "Reloj de Servidor Test",
+            "precio_inicial": "50.00",
+            "incremento_minimo": "5.00",
+            "fecha_fin": fecha_fin
+        })
+        sid = res.get_json()['data']['id']
+
+        det = self.client.get(f'/api/subastas/{sid}').get_json()['data']
+        # El servidor provee tiempo_restante_segundos y servidor_hora_utc
+        self.assertIn("tiempo_restante_segundos", det)
+        self.assertIn("servidor_hora_utc", det)
+        # Debe estar alrededor de 120 segundos independientemente del reloj del cliente
+        self.assertTrue(118 <= det['tiempo_restante_segundos'] <= 121)
+
+    # ── HU-11: Extensión anti-sniping (últimos 60s, máx 10 veces, atómica) ──
+    def test_hu11_extension_anti_sniping_y_limite_10(self):
+        # Crear subasta a la que le quedan 30 segundos (< 60s)
+        with self.app.app_context():
+            sub = Subasta(
+                titulo="Item Sniping",
+                precio_inicial=Decimal("100.00"),
+                incremento_minimo=Decimal("10.00"),
+                fecha_fin=datetime.now(timezone.utc) + timedelta(seconds=30),
+                extensiones_aplicadas=0
+            )
+            db.session.add(sub)
+            db.session.commit()
+            sid = sub.id
+
+        # 1. Primera puja en los últimos 60s -> debe extenderse a 60 segundos
+        res_p1 = self.client.post(f'/api/subastas/{sid}/pujas', json={
+            "nombre": "UserA",
+            "monto": "100.00"
+        })
+        self.assertEqual(res_p1.status_code, 201)
+        data_p1 = res_p1.get_json()['data']
+        self.assertTrue(data_p1.get("se_extendio"))
+        self.assertEqual(data_p1.get("extensiones_aplicadas"), 1)
+
+        # Verificar en detalle que ahora quedan ~60 segundos y extensiones = 1
+        det1 = self.client.get(f'/api/subastas/{sid}').get_json()['data']
+        self.assertTrue(58 <= det1['tiempo_restante_segundos'] <= 60)
+        self.assertEqual(det1['extensiones_aplicadas'], 1)
+
+        # 2. Probar atomicidad ante fallo: Si un intento de puja es rechazado, NO se extiende
+        res_fallo = self.client.post(f'/api/subastas/{sid}/pujas', json={
+            "nombre": "UserA",  # mismo postor -> rechazo
+            "monto": "120.00"
+        })
+        self.assertEqual(res_fallo.status_code, 400)
+        det_post_fallo = self.client.get(f'/api/subastas/{sid}').get_json()['data']
+        self.assertEqual(det_post_fallo['extensiones_aplicadas'], 1)
+
+        # 3. Simular pujas sucesivas hasta alcanzar las 10 extensiones
+        with self.app.app_context():
+            sub_db = db.session.get(Subasta, sid)
+            # Simular que ya lleva 9 extensiones y quedan 20 segundos
+            sub_db.extensiones_aplicadas = 9
+            sub_db.fecha_fin = datetime.now(timezone.utc) + timedelta(seconds=20)
+            db.session.commit()
+
+        # Décima extensión (permitida)
+        res_p10 = self.client.post(f'/api/subastas/{sid}/pujas', json={
+            "nombre": "UserB",
+            "monto": "110.00"
+        })
+        self.assertEqual(res_p10.status_code, 201)
+        self.assertTrue(res_p10.get_json()['data'].get("se_extendio"))
+        self.assertEqual(res_p10.get_json()['data'].get("extensiones_aplicadas"), 10)
+
+        # Simular que quedan 15 segundos y entra la 11ª puja
+        with self.app.app_context():
+            sub_db = db.session.get(Subasta, sid)
+            sub_db.fecha_fin = datetime.now(timezone.utc) + timedelta(seconds=15)
+            db.session.commit()
+
+        res_p11 = self.client.post(f'/api/subastas/{sid}/pujas', json={
+            "nombre": "UserA",
+            "monto": "120.00"
+        })
+        self.assertEqual(res_p11.status_code, 201)
+        # La puja se acepta, pero ya NO se extiende (tope de 10 alcanzado)
+        self.assertFalse(res_p11.get_json()['data'].get("se_extendio"))
+        self.assertEqual(res_p11.get_json()['data'].get("extensiones_aplicadas"), 10)
+
+        det_final = self.client.get(f'/api/subastas/{sid}').get_json()['data']
+        self.assertTrue(det_final['max_extensiones_alcanzadas'])
+        # El tiempo restante sigue siendo <= 15s (no se extendió a 60s)
+        self.assertTrue(det_final['tiempo_restante_segundos'] <= 16)
 
 if __name__ == '__main__':
     unittest.main()

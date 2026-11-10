@@ -158,9 +158,11 @@ class SubastaService:
         data["total_pujas"] = len(pujas)
         data["pujas"] = [p.serializar() for p in pujas]
 
-        # Tiempo restante
+        # Tiempo restante (HU-10: basado estrictamente en el reloj del servidor)
+        ahora = datetime.now(timezone.utc)
+        data["servidor_hora_utc"] = ahora.isoformat()
         if subasta.esta_abierta():
-            delta = subasta.fecha_fin_utc - datetime.now(timezone.utc)
+            delta = subasta.fecha_fin_utc - ahora
             segundos = max(0, int(delta.total_seconds()))
             data["tiempo_restante_segundos"] = segundos
             data["tiempo_restante"] = segundos
@@ -214,11 +216,25 @@ class SubastaService:
             if monto_decimal < precio_minimo:
                 raise ValueError(f"El monto debe ser al menos {precio_minimo}.")
 
+            # HU-11: Extensión anti-sniping si la puja entra en los últimos 60 segundos
+            ahora = datetime.now(timezone.utc)
+            segundos_restantes = (subasta.fecha_fin_utc - ahora).total_seconds()
+            se_extendio = False
+
+            # Extensión si quedan <= 60s y no se ha superado el máximo de 10 extensiones
+            if 0 < segundos_restantes <= 60 and (subasta.extensiones_aplicadas or 0) < 10:
+                subasta.fecha_fin = ahora + timedelta(seconds=60)
+                subasta.extensiones_aplicadas = (subasta.extensiones_aplicadas or 0) + 1
+                se_extendio = True
+
             nueva_puja = Puja(
                 subasta_id=subasta_id,
                 nombre_postor=nombre_postor,
                 monto=monto_decimal,
             )
+            nueva_puja.se_extendio = se_extendio
+            nueva_puja.extensiones_aplicadas = subasta.extensiones_aplicadas
+
             try:
                 db.session.add(nueva_puja)
                 db.session.commit()

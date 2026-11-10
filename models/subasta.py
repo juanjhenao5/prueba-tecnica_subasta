@@ -21,6 +21,9 @@ class Subasta(db.Model):
     ganador = db.Column(db.String(100), nullable=True)
     precio_final = db.Column(db.Numeric(12, 2), nullable=True)
 
+    # HU-11: conteo de extensiones anti-sniping (máximo 10)
+    extensiones_aplicadas = db.Column(db.Integer, default=0, nullable=False)
+
     # Relación con las pujas
     pujas = db.relationship(
         "Puja", backref="subasta", lazy=True, cascade="all, delete-orphan"
@@ -56,4 +59,6 @@ class Subasta(db.Model):
             "estado": "abierta" if abierta else "cerrada",
             "ganador": self.ganador,
             "precio_final": str(self.precio_final) if self.precio_final else None,
+            "extensiones_aplicadas": self.extensiones_aplicadas or 0,
+            "max_extensiones_alcanzadas": (self.extensiones_aplicadas or 0) >= 10,
         }

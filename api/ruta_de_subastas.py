@@ -80,11 +80,21 @@ def pujar(subasta_id):
 
     try:
         puja = SubastaService.registrar_puja(subasta_id, nombre, monto)
+        datos_puja = puja.serializar()
+        se_extendio = getattr(puja, "se_extendio", False)
+        ext_count = getattr(puja, "extensiones_aplicadas", 0)
+        datos_puja["se_extendio"] = se_extendio
+        datos_puja["extensiones_aplicadas"] = ext_count
+
+        mensaje = "Puja registrada exitosamente"
+        if se_extendio:
+            mensaje += f". Tiempo extendido por 60s (Extensión {ext_count}/10)"
+
         return (
             jsonify({
                 "success": True,
-                "mensaje": "Puja registrada exitosamente",
-                "data": puja.serializar(),
+                "mensaje": mensaje,
+                "data": datos_puja,
             }),
             201,
         )

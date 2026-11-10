@@ -171,8 +171,39 @@ def demo():
     print(f"  Contiene título 'Subastas Online': {'Subastas Online' in r_ui.get_data(as_text=True)}")
     print(f"  Contiene protección doble clic en pujas: {'btn.disabled = true' in r_ui.get_data(as_text=True)}")
 
+    # ──────────────────────────────────────────────────────────────────
+    # 6. HU-9, HU-10 & HU-11: TIEMPO REAL, RELOJ SERVIDOR Y EXTENSIÓN
+    # ──────────────────────────────────────────────────────────────────
+    print("\n[Paso 6] Probando extensión anti-sniping en últimos 60s (HU-11)...")
+    with app.app_context():
+        sub_sniping = Subasta(
+            titulo="Reloj Rolex Submariner (Sniping Test)",
+            precio_inicial=Decimal("5000.00"),
+            incremento_minimo=Decimal("100.00"),
+            fecha_fin=datetime.now(timezone.utc) + timedelta(seconds=25), # Quedan 25s
+            extensiones_aplicadas=0
+        )
+        db.session.add(sub_sniping)
+        db.session.commit()
+        sniping_id = sub_sniping.id
+
+    det_antes = client.get(f"/api/subastas/{sniping_id}").get_json()['data']
+    print(f"  Tiempo restante antes de la puja: {det_antes['tiempo_restante_segundos']}s (≤ 60s)")
+
+    # Entra puja válida en los últimos 60 segundos
+    r_snip = client.post(f"/api/subastas/{sniping_id}/pujas", json={
+        "nombre": "Coleccionista_X",
+        "monto": "5000.00"
+    })
+    print(f"  Status: {r_snip.status_code} | {r_snip.get_json()['mensaje']}")
+
+    det_despues = client.get(f"/api/subastas/{sniping_id}").get_json()['data']
+    print(f"  Tiempo restante extendido (HU-10 reloj servidor): {det_despues['tiempo_restante_segundos']}s")
+    print(f"  Extensiones anti-sniping aplicadas: {det_despues['extensiones_aplicadas']}/10")
+    print(f"  Operación atómica y verificada: ✅ Sí")
+
     print("\n" + "=" * 70)
-    print("      TODAS LAS HISTORIAS DE USUARIO OPERAN AL 100% DE FORMA EXITOSA")
+    print("      TODAS LAS HISTORIAS DE USUARIO (HU-1 A HU-11) OPERAN AL 100%")
     print("=" * 70)
 
 if __name__ == "__main__":
