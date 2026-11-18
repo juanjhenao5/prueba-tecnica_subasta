@@ -6,15 +6,16 @@ subasta_bp = Blueprint("subasta_bp", __name__, url_prefix="/api/subastas")
 
 # ── HU-1: Crear subasta ─────────────────────────────────────────────
 
-@subasta_bp.route("", methods=["POST"])
+@subasta_bp.route("", methods=["POST"], strict_slashes=False)
+@subasta_bp.route("/", methods=["POST"], strict_slashes=False)
 def crear_subasta():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
 
     campos_requeridos = ["titulo", "precio_inicial", "incremento_minimo", "fecha_fin"]
     faltantes = [c for c in campos_requeridos if c not in data or data[c] is None]
     if faltantes:
         return (
-            jsonify({"success": False, "error": f"Faltan campos: {', '.join(faltantes)}"}),
+            jsonify({"success": False, "error": f"Faltan campos obligatorios: {', '.join(faltantes)}"}),
             400,
         )
 
@@ -37,8 +38,10 @@ def crear_subasta():
     except ValueError as e:
         status_code = 404 if "no existe" in str(e).lower() else 400
         return jsonify({"success": False, "error": str(e)}), status_code
-    except Exception:
-        return jsonify({"success": False, "error": "Error al crear la subasta."}), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"Error al crear la subasta: {str(e)}"}), 500
 
 
 # ── HU-2: Listar subastas ───────────────────────────────────────────

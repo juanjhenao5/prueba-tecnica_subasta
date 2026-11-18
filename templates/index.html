@@ -185,12 +185,15 @@
   function mostrarCrear() {
     mostrarSeccion("seccion-crear");
     subastaActualId = null;
-    // Establecer fecha mínima (ahora) y máxima (+7 días)
+    // Establecer fecha mínima (ahora), máxima (+7 días) y valor sugerido (+24 horas)
     const ahora = new Date();
     const max = new Date(ahora.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const sugerida = new Date(ahora.getTime() + 24 * 60 * 60 * 1000);
     const toLocal = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    document.getElementById("crear-fecha-fin").min = toLocal(ahora);
-    document.getElementById("crear-fecha-fin").max = toLocal(max);
+    const inputFecha = document.getElementById("crear-fecha-fin");
+    inputFecha.min = toLocal(ahora);
+    inputFecha.max = toLocal(max);
+    inputFecha.value = toLocal(sugerida);
   }
 
   // ── Alertas ───────────────────────────────────────────────────────
@@ -544,19 +547,65 @@
     btn.disabled = true;
     btn.textContent = "Creando...";
 
-    const fechaLocal = document.getElementById("crear-fecha-fin").value;
-    // Convertir datetime-local a ISO con timezone
-    const fechaISO = new Date(fechaLocal).toISOString();
-
     try {
+      const tituloInput = document.getElementById("crear-titulo");
+      const descInput = document.getElementById("crear-descripcion");
+      const precioInput = document.getElementById("crear-precio");
+      const incrementoInput = document.getElementById("crear-incremento");
+      const fechaInput = document.getElementById("crear-fecha-fin");
+
+      const titulo = tituloInput ? tituloInput.value.trim() : "";
+      const descripcion = descInput ? descInput.value.trim() : "";
+      const precioInicial = precioInput ? precioInput.value.trim() : "";
+      const incrementoMinimo = incrementoInput ? incrementoInput.value.trim() : "";
+      const fechaLocal = fechaInput ? fechaInput.value.trim() : "";
+
+      if (!titulo) {
+        mostrarError("El título del producto es obligatorio.");
+        btn.disabled = false;
+        btn.textContent = "Crear Subasta";
+        return;
+      }
+
+      if (!precioInicial || parseFloat(precioInicial) <= 0) {
+        mostrarError("El precio inicial debe ser un número mayor a 0.");
+        btn.disabled = false;
+        btn.textContent = "Crear Subasta";
+        return;
+      }
+
+      if (!incrementoMinimo || parseFloat(incrementoMinimo) <= 0) {
+        mostrarError("El incremento mínimo debe ser un número mayor a 0.");
+        btn.disabled = false;
+        btn.textContent = "Crear Subasta";
+        return;
+      }
+
+      if (!fechaLocal) {
+        mostrarError("Por favor seleccione la fecha y hora de finalización.");
+        btn.disabled = false;
+        btn.textContent = "Crear Subasta";
+        return;
+      }
+
+      const d = new Date(fechaLocal);
+      if (isNaN(d.getTime())) {
+        mostrarError("La fecha seleccionada no es válida.");
+        btn.disabled = false;
+        btn.textContent = "Crear Subasta";
+        return;
+      }
+
+      const fechaISO = d.toISOString();
+
       const resp = await fetch(API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          titulo: document.getElementById("crear-titulo").value,
-          descripcion: document.getElementById("crear-descripcion").value,
-          precio_inicial: document.getElementById("crear-precio").value,
-          incremento_minimo: document.getElementById("crear-incremento").value,
+          titulo: titulo,
+          descripcion: descripcion,
+          precio_inicial: precioInicial,
+          incremento_minimo: incrementoMinimo,
           fecha_fin: fechaISO,
         }),
       });
@@ -564,14 +613,20 @@
       const json = await resp.json();
 
       if (json.success) {
-        mostrarExito("¡Subasta creada exitosamente!");
+        mostrarExito("¡Producto publicado en subasta exitosamente!");
         document.getElementById("form-crear").reset();
-        mostrarLista();
+        // Redirigir al detalle del nuevo producto o recargar la lista
+        if (json.data && json.data.id) {
+          verDetalle(json.data.id);
+        } else {
+          mostrarLista();
+        }
       } else {
-        mostrarError(json.error);
+        mostrarError(json.error || "No se pudo guardar el producto.");
       }
     } catch (e) {
-      mostrarError("Error de conexión con el servidor.");
+      console.error("Error al crear subasta:", e);
+      mostrarError("Error al guardar: " + (e.message || "verifique la conexión."));
     } finally {
       btn.disabled = false;
       btn.textContent = "Crear Subasta";

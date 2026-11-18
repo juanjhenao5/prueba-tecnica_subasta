@@ -79,9 +79,12 @@ class SubastaService:
 
         # Validar fecha de fin
         try:
-            fecha_fin = datetime.fromisoformat(fecha_fin_str)
-        except (ValueError, TypeError):
-            raise ValueError("La fecha de fin no tiene un formato válido (use ISO 8601).")
+            limpia = str(fecha_fin_str).strip()
+            if limpia.endswith("Z"):
+                limpia = limpia[:-1] + "+00:00"
+            fecha_fin = datetime.fromisoformat(limpia)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"La fecha de fin no tiene un formato válido (use ISO 8601): {e}")
 
         if fecha_fin.tzinfo is None:
             fecha_fin = fecha_fin.replace(tzinfo=timezone.utc)
@@ -91,7 +94,7 @@ class SubastaService:
         if fecha_fin <= ahora:
             raise ValueError("La fecha de fin debe ser en el futuro.")
 
-        if fecha_fin > ahora + timedelta(days=7):
+        if fecha_fin > ahora + timedelta(days=7, minutes=5):
             raise ValueError("La fecha de fin no puede ser mayor a 7 días desde ahora.")
 
         nueva = Subasta(
